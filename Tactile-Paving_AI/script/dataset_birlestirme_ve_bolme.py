@@ -9,7 +9,7 @@ from collections import defaultdict
 source_datasets = [
     "Tenji dots 2.v4i.yolov8",
     "Tenji from 10k.v1i.yolov8",
-    "tenjima400.v1i.yolov8"
+    "tenjima400..yolov8"
 ]
 
 # Hedef klasör
