@@ -1,0 +1,13 @@
+train: C:\Users\besse\coding\tasarim\Tactile-Paving_AI\data\tactile paving image dataset.v3i.yolov8\train
+val: C:\Users\besse\coding\tasarim\Tactile-Paving_AI\data\tactile paving image dataset.v3i.yolov8\valid
+test: C:\Users\besse\coding\tasarim\Tactile-Paving_AI\data\tactile paving image dataset.v3i.yolov8\test
+
+nc: 2
+names: ['dot', 'line']
+
+roboflow:
+  workspace: yolov8-euuri
+  project: tactile-paving-image-dataset-cb4u9
+  version: 3
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/yolov8-euuri/tactile-paving-image-dataset-cb4u9/dataset/3

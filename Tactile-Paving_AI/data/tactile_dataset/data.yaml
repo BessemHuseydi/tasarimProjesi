@@ -1,0 +1,6 @@
+train: C:/Users/besse/coding/tasarim/Tactile-Paving_AI/data/tactile_dataset/train/images
+val: C:/Users/besse/coding/tasarim/Tactile-Paving_AI/data/tactile_dataset/val/images
+nc: 2
+names:
+- dot
+- line

@@ -1,0 +1,2 @@
+OCR.PY
+    pip install opencv-python pytesseract gtts playsound pillow
