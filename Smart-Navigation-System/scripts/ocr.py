@@ -8,9 +8,11 @@ import time
 import os
 import sys
 
+# Windows kullanıyorsanız ve Tesseract path hatası alırsanız alttaki satırı aktif edip kendi yolunuzu yazın:
+# pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+
 class UniversalOCRReader:
-    def __init__(self, use_cuda=True):
-        self.use_cuda = use_cuda
+    def __init__(self):
         self.tesseract_lang = 'tur+eng'
         self.frame_skip = 10  # Her 10 frame'de bir işle
         self.detected_texts = deque(maxlen=10)
@@ -21,7 +23,7 @@ class UniversalOCRReader:
         self.engine.setProperty('rate', 150)
         self.engine.setProperty('volume', 1.0)
         
-        # Türkçe ses
+        # Türkçe ses ayarı
         voices = self.engine.getProperty('voices')
         for voice in voices:
             if 'turkish' in voice.name.lower() or 'tr' in voice.id.lower():
@@ -32,103 +34,27 @@ class UniversalOCRReader:
         self.text_queue = queue.Queue()
         self.speaking = False
         
-        # CUDA KONTROLÜ - Detaylı
-        self.gpu_available = False
         print("\n" + "="*60)
-        print("🔍 CUDA KONTROL EDİLİYOR...")
-        print("="*60)
-        
-        try:
-            # OpenCV CUDA build kontrolü
-            build_info = cv2.getBuildInformation()
-            
-            if 'CUDA' in build_info:
-                print("✅ OpenCV CUDA ile derlenmiş!")
-                
-                # CUDA cihaz sayısı
-                cuda_count = cv2.cuda.getCudaEnabledDeviceCount()
-                print(f"✅ CUDA Cihaz Sayısı: {cuda_count}")
-                
-                if cuda_count > 0:
-                    self.gpu_available = True
-                    # GPU bilgileri
-                    for i in range(cuda_count):
-                        device_name = cv2.cuda.getDevice()
-                        print(f"   GPU {i}: Aktif")
-                    print(f"✅ GPU KULLANILACAK!")
-                else:
-                    print("❌ CUDA cihazı bulunamadı!")
-                    print("   NVIDIA GPU takılı ve driver güncel mi kontrol edin")
-            else:
-                print("❌ OpenCV CUDA desteği YOK!")
-                print("   opencv-contrib-python yerine CUDA'lı OpenCV kurmalısınız")
-                print("\n📝 CUDA'lı OpenCV Kurulum:")
-                print("   pip uninstall opencv-python opencv-contrib-python")
-                print("   pip install opencv-contrib-python")
-                print("   veya kaynak koddan CUDA ile derleyin:")
-                print("   https://docs.opencv.org/master/d6/d15/tutorial_building_tegra_cuda.html")
-                
-        except Exception as e:
-            print(f"❌ CUDA kontrol hatası: {e}")
-        
-        if not self.gpu_available:
-            print("⚠️  CPU MODU KULLANILACAK")
-        
+        print("💻 SİSTEM: SADECE CPU MODU AKTİF")
         print("="*60 + "\n")
     
-    def preprocess_frame_gpu(self, frame):
-        """GPU ile frame ön işleme - GERÇEK CUDA İŞLEMLERİ"""
-        try:
-            # GPU'ya yükle
-            gpu_frame = cv2.cuda_GpuMat()
-            gpu_frame.upload(frame)
-            
-            # RGB'den Gray'e çevir - GPU'da
-            gpu_gray = cv2.cuda.cvtColor(gpu_frame, cv2.COLOR_BGR2GRAY)
-            
-            # Gaussian Blur - GPU'da
-            gaussian_filter = cv2.cuda.createGaussianFilter(
-                cv2.CV_8UC1, cv2.CV_8UC1, (5, 5), 1.5
-            )
-            gpu_blurred = gaussian_filter.apply(gpu_gray)
-            
-            # Threshold - GPU'da
-            _, gpu_thresh = cv2.cuda.threshold(
-                gpu_blurred, 0, 255, 
-                cv2.THRESH_BINARY + cv2.THRESH_OTSU
-            )
-            
-            # Morfolojik işlemler - GPU'da (opsiyonel)
-            morph_filter = cv2.cuda.createMorphologyFilter(
-                cv2.MORPH_CLOSE, cv2.CV_8UC1, 
-                cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-            )
-            gpu_morphed = morph_filter.apply(gpu_thresh)
-            
-            # CPU'ya indir
-            result = gpu_morphed.download()
-            return result
-            
-        except Exception as e:
-            print(f"GPU işlem hatası: {e}, CPU'ya geçiliyor...")
-            return self.preprocess_frame_cpu(frame)
-    
-    def preprocess_frame_cpu(self, frame):
+    def preprocess_frame(self, frame):
         """CPU ile frame ön işleme"""
+        # Gri tonlamaya çevir
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        blurred = cv2.GaussianBlur(gray, (5, 5), 1.5)
+        # Gürültü azaltma (Blur)
+        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+        # Eşikleme (Threshold)
         _, thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        # Morfolojik işlemler (Gürültü temizleme)
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
         morphed = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
+        
         return morphed
     
     def detect_text_with_boxes(self, frame):
         """Frame'den metin ve konumlarını çıkarma"""
-        # GPU veya CPU ile işle
-        if self.gpu_available and self.use_cuda:
-            processed = self.preprocess_frame_gpu(frame)
-        else:
-            processed = self.preprocess_frame_cpu(frame)
+        processed = self.preprocess_frame(frame)
         
         # OCR uygula
         custom_config = r'--oem 3 --psm 6'
@@ -148,6 +74,7 @@ class UniversalOCRReader:
         
         for i in range(n_boxes):
             conf = int(ocr_data['conf'][i])
+            # Güven oranı %30'dan büyükse işle
             if conf > 30:
                 text = ocr_data['text'][i].strip()
                 if len(text) > 1:
@@ -196,6 +123,7 @@ class UniversalOCRReader:
     def is_duplicate(self, text):
         """Benzer metin kontrolü"""
         for prev_text in self.detected_texts:
+            # Kelime bazlı benzerlik kontrolü
             similarity = len(set(text.split()) & set(prev_text.split())) / \
                         max(len(set(text.split())), len(set(prev_text.split())), 1)
             if similarity > 0.7:
@@ -265,12 +193,7 @@ class UniversalOCRReader:
             cv2.putText(frame, f"FPS: {current_fps:.1f}", (10, 40), 
                        cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 3)
             
-            # GPU/CPU durumu
-            mode = "GPU ✅" if (self.gpu_available and self.use_cuda) else "CPU"
-            cv2.putText(frame, mode, (frame.shape[1] - 120, 40),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 255), 2)
-            
-            # OCR işle
+            # OCR işle (Frame atlayarak)
             if self.frame_count % self.frame_skip == 0 and not self.speaking:
                 ocr_data = self.detect_text_with_boxes(frame)
                 text = self.draw_boxes_and_text(frame, ocr_data)
@@ -284,7 +207,7 @@ class UniversalOCRReader:
             cv2.putText(frame, status, (10, 80),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
             
-            cv2.imshow('Video OCR', frame)
+            cv2.imshow('Video OCR (CPU)', frame)
             
             key = cv2.waitKey(1) & 0xFF
             if key == ord('q'):
@@ -311,7 +234,7 @@ class UniversalOCRReader:
         # Kamera ayarları
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-        cap.set(cv2.CAP_PROP_FPS, 60)
+        cap.set(cv2.CAP_PROP_FPS, 30)
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         
         if not cap.isOpened():
@@ -343,11 +266,6 @@ class UniversalOCRReader:
             cv2.putText(frame, f"FPS: {current_fps:.1f}", (10, 40), 
                        cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 3)
             
-            # GPU/CPU durumu
-            mode = "GPU ✅" if (self.gpu_available and self.use_cuda) else "CPU"
-            cv2.putText(frame, mode, (frame.shape[1] - 120, 40),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 255), 2)
-            
             # OCR işle
             if self.frame_count % self.frame_skip == 0 and not self.speaking:
                 ocr_data = self.detect_text_with_boxes(frame)
@@ -362,7 +280,7 @@ class UniversalOCRReader:
             cv2.putText(frame, status, (10, 80),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
             
-            cv2.imshow('Kamera OCR', frame)
+            cv2.imshow('Kamera OCR (CPU)', frame)
             
             key = cv2.waitKey(1) & 0xFF
             if key == ord('q'):
@@ -379,14 +297,11 @@ class UniversalOCRReader:
 def main():
     """Ana program - Kullanıcı girişi"""
     print("\n" + "="*60)
-    print("🎯 EVRENSEL OCR OKUYUCU - Resim/Video/Kamera")
+    print("🎯 EVRENSEL OCR OKUYUCU - Resim/Video/Kamera (CPU)")
     print("="*60)
     
-    # CUDA kullanımı
-    use_cuda = input("\n🔧 CUDA kullanılsın mı? (E/H) [E]: ").strip().lower()
-    use_cuda = use_cuda != 'h'
-    
-    reader = UniversalOCRReader(use_cuda=use_cuda)
+    # Doğrudan başlat (CUDA sorma yok)
+    reader = UniversalOCRReader()
     
     # Mod seçimi
     print("\n📝 Mod Seçin:")

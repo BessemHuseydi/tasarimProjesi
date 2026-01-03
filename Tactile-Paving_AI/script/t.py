@@ -61,7 +61,7 @@ from ultralytics import YOLO
 import cv2
 
 # Eğitilmiş segmentasyon modelini yükle
-model = YOLO(r"C:\Users\besse\coding\tasarim\runs\segment\yolov8L_Tactile_Segment6\weights\best.pt")
+model = YOLO(r"C:\Users\besse\coding\tasarim\Tactile-Paving_AI\models\yolov8L_Tactile_Segment6\weights\best.pt")
 
 # Test edilecek video yolu (KENDİ DOSYA YOLUNU YAZ)
 video_path = r"C:\Users\besse\coding\tasarim\Tactile-Paving_AI\videos\v6.mp4"
